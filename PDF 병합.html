@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스마트 PDF 병합 도구 (PDF Merger)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Pretendard) -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- PDF-Lib Library CDN (Client-side PDF merging) -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <!-- PDF.js for generating document cover previews -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+    <style>
+        body {
+            font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+        }
+        /* Custom scrollbar */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 text-white p-2 rounded-lg flex items-center justify-center">
+                    <i data-lucide="combine" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">Smart PDF Merger</h1>
+                    <p class="text-xs text-slate-500">여러 PDF 파일을 브라우저 안에서 안전하게 하나로 합치는 도구</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2 text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+                <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i>
+                <span>파일은 서버로 전송되지 않으며 안전하게 로컬에서 처리됩니다.</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col lg:flex-row gap-8">
+        
+        <!-- Left Column: Upload & Options -->
+        <div class="w-full lg:w-[400px] flex flex-col gap-6 shrink-0">
+            
+            <!-- Upload Area -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <h2 class="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                    <i data-lucide="file-up" class="w-5 h-5 text-indigo-500"></i>
+                    PDF 파일 추가하기
+                </h2>
+                
+                <div id="dropzone" class="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-xl p-6 text-center cursor-pointer transition-colors duration-200 bg-slate-50 hover:bg-indigo-50/30 flex flex-col items-center justify-center min-h-[180px]">
+                    <input type="file" id="fileInput" accept=".pdf" multiple class="hidden" />
+                    <div class="flex flex-col items-center">
+                        <i data-lucide="plus-circle" class="w-12 h-12 text-indigo-500 mb-3"></i>
+                        <span class="text-sm font-medium text-slate-700">PDF 파일 드래그 또는 클릭</span>
+                        <span class="text-xs text-slate-400 mt-1">여러 개를 동시에 선택하여 업로드 가능</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Merge Settings & Export Actions -->
+            <div id="actionCard" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm opacity-50 pointer-events-none transition-opacity duration-300">
+                <h2 class="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                    <i data-lucide="settings" class="w-5 h-5 text-indigo-500"></i>
+                    병합 설정 및 내보내기
+                </h2>
+
+                <div class="space-y-4">
+                    <div class="space-y-2">
+                        <label class="text-xs font-medium text-slate-600 block">저장할 파일 이름</label>
+                        <input type="text" id="outputFileName" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="merged_document" value="merged_document">
+                    </div>
+
+                    <div class="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1.5">
+                        <div class="flex justify-between text-xs text-slate-500">
+                            <span>총 선택된 파일수:</span>
+                            <span id="statFileCount" class="font-semibold text-slate-700">0개</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-slate-500">
+                            <span>총 페이지 수:</span>
+                            <span id="statPageCount" class="font-semibold text-slate-700">0장</span>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 pt-2">
+                        <button id="clearAllBtn" class="flex-1 py-2.5 border border-slate-200 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>전체 비우기
+                        </button>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-100">
+                        <button id="mergeBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 group">
+                            <i data-lucide="file-output" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
+                            <span>PDF 병합 후 저장하기</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: List of files and re-ordering panel -->
+        <div class="flex-1 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden min-h-[500px]">
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="list-ordered" class="w-5 h-5 text-indigo-500"></i>
+                    <h2 class="text-sm font-bold text-slate-800">병합 대기 목록 (순서 변경 가능)</h2>
+                </div>
+                <span class="text-xs text-slate-500">위에서 아래 방향 순서대로 병합됩니다.</span>
+            </div>
+
+            <!-- Loader (Processing covers) -->
+            <div id="previewLoader" class="hidden p-12 flex-1 flex-col items-center justify-center">
+                <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p class="text-sm font-medium text-slate-600 mt-4">PDF 분석 및 미리보기를 구성 중입니다...</p>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="flex-1 flex flex-col items-center justify-center p-12 text-center">
+                <div class="bg-indigo-50 text-indigo-500 p-4 rounded-full mb-4">
+                    <i data-lucide="files" class="w-10 h-10"></i>
+                </div>
+                <h3 class="text-sm font-semibold text-slate-700">추가된 PDF 파일이 없습니다</h3>
+                <p class="text-xs text-slate-400 mt-1.5 max-w-xs leading-relaxed">왼쪽 업로드 카드를 이용해 병합할 PDF 파일들을 추가하세요. 다중 업로드를 통해 여러 개를 순서대로 쌓을 수 있습니다.</p>
+            </div>
+
+            <!-- Files List Container -->
+            <div id="filesContainer" class="hidden flex-1 p-6 overflow-y-auto max-h-[650px] custom-scroll bg-slate-50/40">
+                <div id="filesList" class="space-y-3">
+                    <!-- Dynamic PDF File elements will be injected here -->
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-6 mt-12">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-xs text-slate-400 leading-relaxed">&copy; 2026 Smart PDF Merger. 100% Client-Side Private Application.</p>
+        </div>
+    </footer>
+
+    <!-- Alert Modal -->
+    <div id="alertModal" class="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[100] flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-200">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-3">
+                    <div id="alertIconBg" class="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                        <i id="alertIcon" data-lucide="info" class="w-6 h-6"></i>
+                    </div>
+                    <h3 id="alertTitle" class="text-base font-bold text-slate-900">알림</h3>
+                </div>
+                <p id="alertMsg" class="text-xs text-slate-500 leading-relaxed">여기에 메시지가 입력됩니다.</p>
+            </div>
+            <div class="bg-slate-50 px-4 py-3 flex justify-end">
+                <button onclick="closeAlert()" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Overlay Loading -->
+    <div id="processingOverlay" class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[100] flex flex-col items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-xs text-center">
+            <div class="relative w-16 h-16 flex items-center justify-center mb-4">
+                <div class="absolute inset-0 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                <i data-lucide="combine" class="w-6 h-6 text-indigo-600 animate-bounce"></i>
+            </div>
+            <h3 class="text-sm font-bold text-slate-900">PDF 파일들을 병합 중</h3>
+            <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">선택한 PDF 파일 데이터들을 순서에 따라 결합하고 있습니다. 용량이 클 경우 시간이 다소 소요될 수 있습니다.</p>
+        </div>
+    </div>
+
+    <script>
+        // PDF.js worker setting
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        // Global State
+        let uploadedFiles = []; // Array of object: { id, name, size, pageCount, arrayBuffer, coverUrl }
+
+        // Elements
+        const fileInput = document.getElementById('fileInput');
+        const dropzone = document.getElementById('dropzone');
+        const actionCard = document.getElementById('actionCard');
+        const previewLoader = document.getElementById('previewLoader');
+        const emptyState = document.getElementById('emptyState');
+        const filesContainer = document.getElementById('filesContainer');
+        const filesList = document.getElementById('filesList');
+        
+        const statFileCount = document.getElementById('statFileCount');
+        const statPageCount = document.getElementById('statPageCount');
+        const outputFileName = document.getElementById('outputFileName');
+        const mergeBtn = document.getElementById('mergeBtn');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const processingOverlay = document.getElementById('processingOverlay');
+
+        // Initializer
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            setupDragAndDrop();
+        });
+
+        // Trigger input file selection
+        dropzone.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFiles(e.target.files);
+            }
+        });
+
+        // Clear all state
+        clearAllBtn.addEventListener('click', () => {
+            uploadedFiles = [];
+            fileInput.value = '';
+            renderFilesList();
+        });
+
+        // Drag and drop setup
+        function setupDragAndDrop() {
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.add('border-indigo-500', 'bg-indigo-50/50');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('border-indigo-500', 'bg-indigo-50/50');
+                }, false);
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length > 0) {
+                    const pdfFiles = Array.from(files).filter(f => f.type === 'application/pdf');
+                    if (pdfFiles.length > 0) {
+                        handleFiles(pdfFiles);
+                    } else {
+                        showAlert('파일 형식 오동작', '추가된 파일 중 PDF 형식이 감지되지 않았습니다.', 'warning');
+                    }
+                }
+            });
+        }
+
+        // Process newly added files
+        async function handleFiles(files) {
+            previewLoader.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+
+            for (const file of files) {
+                if (file.type !== 'application/pdf') continue;
+
+                const fileId = 'pdf-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
+
+                try {
+                    const arrayBuffer = await readFileAsArrayBuffer(file);
+                    
+                    // Render Cover preview using PDF.js
+                    const loadingTask = pdfjsLib.getDocument({data: arrayBuffer.slice(0)});
+                    const pdfDoc = await loadingTask.promise;
+                    const pageCount = pdfDoc.numPages;
+
+                    // Fetch page 1 for render
+                    const page = await pdfDoc.getPage(1);
+                    const viewport = page.getViewport({ scale: 0.2 });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+                    await page.render(renderContext).promise;
+                    const coverUrl = canvas.toDataURL();
+
+                    // Push object safely to array
+                    uploadedFiles.push({
+                        id: fileId,
+                        name: file.name,
+                        size: sizeInMB,
+                        pageCount: pageCount,
+                        arrayBuffer: arrayBuffer,
+                        coverUrl: coverUrl
+                    });
+
+                } catch (error) {
+                    console.error('File parsing error:', error);
+                    showAlert('오류', `${file.name} 파일을 파싱하는 데 실패했습니다.`, 'error');
+                }
+            }
+
+            previewLoader.classList.add('hidden');
+            renderFilesList();
+        }
+
+        // Promise wrapper FileReader
+        function readFileAsArrayBuffer(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(e);
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // Render PDF list inside Container
+        function renderFilesList() {
+            filesList.innerHTML = '';
+
+            if (uploadedFiles.length === 0) {
+                emptyState.classList.remove('hidden');
+                filesContainer.classList.add('hidden');
+                actionCard.classList.add('opacity-50', 'pointer-events-none');
+                
+                statFileCount.textContent = '0개';
+                statPageCount.textContent = '0장';
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            filesContainer.classList.remove('hidden');
+            actionCard.classList.remove('opacity-50', 'pointer-events-none');
+
+            // Set Stats calculations
+            statFileCount.textContent = `${uploadedFiles.length}개`;
+            const totalPages = uploadedFiles.reduce((acc, file) => acc + file.pageCount, 0);
+            statPageCount.textContent = `${totalPages}장`;
+
+            // Auto set file name if not customized
+            if (outputFileName.value === 'merged_document' || !outputFileName.value.trim()) {
+                const firstCleanName = uploadedFiles[0].name.replace(/\.[^/.]+$/, "");
+                outputFileName.value = `${firstCleanName}_merged`;
+            }
+
+            // Create individual DOM items
+            uploadedFiles.forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = "bg-white p-4 rounded-xl border border-slate-200 hover:border-slate-300 transition-all flex items-center justify-between gap-4 shadow-xs";
+                
+                item.innerHTML = `
+                    <div class="flex items-center gap-4 min-w-0">
+                        <!-- Number Order Index Badge -->
+                        <div class="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0">
+                            ${index + 1}
+                        </div>
+                        <!-- Canvas cover thumbnail thumbnail -->
+                        <div class="w-12 h-16 bg-slate-100 rounded border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                            <img src="${file.coverUrl}" class="w-full h-full object-cover" alt="PDF Cover preview"/>
+                        </div>
+                        <div class="min-w-0">
+                            <h4 class="text-sm font-semibold text-slate-800 truncate" title="${file.name}">${file.name}</h4>
+                            <p class="text-[11px] text-slate-500 mt-0.5">${file.size} MB · <span class="text-indigo-600 font-medium">${file.pageCount} Pages</span></p>
+                        </div>
+                    </div>
+
+                    <!-- Actions Controls -->
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button onclick="moveItem(${index}, -1)" class="p-2 text-slate-400 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors" title="위로 이동" ${index === 0 ? 'disabled style="opacity: 0.3;"' : ''}>
+                            <i data-lucide="chevron-up" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="moveItem(${index}, 1)" class="p-2 text-slate-400 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors" title="아래로 이동" ${index === uploadedFiles.length - 1 ? 'disabled style="opacity: 0.3;"' : ''}>
+                            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="removeItem('${file.id}')" class="p-2 text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors" title="목록에서 제외">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `;
+                
+                filesList.appendChild(item);
+            });
+
+            lucide.createIcons();
+        }
+
+        // Change Item sequence
+        window.moveItem = function(index, direction) {
+            const targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= uploadedFiles.length) return;
+
+            // Swap index placement
+            const temp = uploadedFiles[index];
+            uploadedFiles[index] = uploadedFiles[targetIndex];
+            uploadedFiles[targetIndex] = temp;
+
+            renderFilesList();
+        }
+
+        // Remove item from compilation list
+        window.removeItem = function(id) {
+            uploadedFiles = uploadedFiles.filter(f => f.id !== id);
+            renderFilesList();
+        }
+
+        // MERGE ACTION EXECUTOR
+        mergeBtn.addEventListener('click', async () => {
+            if (uploadedFiles.length < 2) {
+                showAlert('설정 확인', 'PDF를 병합하려면 최소 2개 이상의 파일이 필요합니다.', 'warning');
+                return;
+            }
+
+            // Show Processing
+            processingOverlay.classList.remove('hidden');
+
+            try {
+                // Initialize clean PDF-Lib instance Document
+                const mergedPdfDoc = await PDFLib.PDFDocument.create();
+
+                // Sequentially read and append pages
+                for (const fileObj of uploadedFiles) {
+                    const srcPdfDoc = await PDFLib.PDFDocument.load(fileObj.arrayBuffer);
+                    const pages = await mergedPdfDoc.copyPages(srcPdfDoc, srcPdfDoc.getPageIndices());
+                    pages.forEach(page => mergedPdfDoc.addPage(page));
+                }
+
+                // Render compiled PDF into bytes array
+                const mergedPdfBytes = await mergedPdfDoc.save();
+
+                // Trigger automatic download
+                let outputName = outputFileName.value.trim();
+                if (!outputName) outputName = "merged_document";
+                if (!outputName.toLowerCase().endsWith(".pdf")) {
+                    outputName += ".pdf";
+                }
+
+                downloadBlob(mergedPdfBytes, outputName, 'application/pdf');
+
+            } catch (error) {
+                console.error('Merge Error:', error);
+                showAlert('병합 실패', 'PDF 파일들을 병합하여 결합하는 처리 중 내부 구조적 문제로 실패했습니다. 암호화가 풀려있는지 확인하세요.', 'error');
+            } finally {
+                processingOverlay.classList.add('hidden');
+            }
+        });
+
+        // Trigger safe file download
+        function downloadBlob(data, fileName, mimeType) {
+            const blob = new Blob([data], { type: mimeType });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        // Custom Notification Controller
+        function showAlert(title, text, type = 'info') {
+            const modal = document.getElementById('alertModal');
+            const iconBg = document.getElementById('alertIconBg');
+            const icon = document.getElementById('alertIcon');
+            const titleEl = document.getElementById('alertTitle');
+            const msgEl = document.getElementById('alertMsg');
+
+            titleEl.textContent = title;
+            msgEl.textContent = text;
+
+            // Type theme styles
+            if (type === 'error') {
+                iconBg.className = "p-2 bg-red-50 text-red-600 rounded-lg";
+                icon.setAttribute('data-lucide', 'x-circle');
+            } else if (type === 'warning') {
+                iconBg.className = "p-2 bg-amber-50 text-amber-600 rounded-lg";
+                icon.setAttribute('data-lucide', 'alert-triangle');
+            } else {
+                iconBg.className = "p-2 bg-indigo-50 text-indigo-600 rounded-lg";
+                icon.setAttribute('data-lucide', 'info');
+            }
+
+            lucide.createIcons();
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.firstElementChild.classList.remove('scale-95');
+            }, 10);
+        }
+
+        window.closeAlert = function() {
+            const modal = document.getElementById('alertModal');
+            modal.classList.add('opacity-0');
+            modal.firstElementChild.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+    </script>
+</body>
+</html>
